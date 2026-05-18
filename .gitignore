@@ -1,0 +1,11 @@
+# Entorno virtual
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Variables de entorno (Credenciales)
+.env
+
+# Base de datos/Conocimiento local (opcional, si no quieres que se borre en la nube)
+# base_conocimiento.txt
