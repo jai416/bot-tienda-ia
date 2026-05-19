@@ -173,7 +173,7 @@ def main():
 
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, manejar_mensaje))
+    app.add_handler(MessageHandler(filters.TEXT, manejar_mensaje))
     app.add_handler(MessageHandler(filters.PHOTO, manejar_foto))
 
     print("🤖 Bot Inteligente con Panel de Control en marcha...")
