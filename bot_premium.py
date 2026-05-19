@@ -11,22 +11,19 @@ from PIL import Image
 # 1. Configurar los registros de consola (Logs)
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Cargar archivo .env local si existe (para tus pruebas en PC)
 load_dotenv()
 
 # 2. Leer las Variables de Entorno
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_KEY = os.getenv("GEMINI_KEY")
 
-# Leer los IDs de administradores (ej: "123456,789101") y convertirlos en lista de números
 admin_ids_raw = os.getenv("ADMIN_IDS", "")
 ADMIN_IDS = [int(x.strip()) for x in admin_ids_raw.split(",") if x.strip()]
 
-# 3. Inicializar el cliente de la Inteligencia Artificial de Google
+# 3. Inicializar el cliente de Gemini
 client = genai.Client(api_key=GEMINI_KEY)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Maneja el saludo inicial cuando un usuario escribe /start"""
     texto_bienvenida = (
         "👋 ¡Hola! Bienvenido a nuestro Asistente Virtual Inteligente 🤖🚀\n\n"
         "Estoy aquí para ayudarte las 24 horas del día. Gracias a mi IA, puedo:\n"
@@ -38,33 +35,87 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(texto_bienvenida)
 
 async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Maneja los mensajes de texto entrantes"""
     user_id = update.effective_user.id
-    texto_recibido = update.message.text
+    texto_recibido = update.message.text.strip()
 
-    # 🔐 CASO 1: Es un Administrador intentando registrar un producto
-    if user_id in ADMIN_IDS and texto_recibido.startswith("/guardar"):
-        nueva_info = texto_recibido.replace("/guardar", "").strip()
-        if not nueva_info:
-            await update.message.reply_text("❌ Por favor, escribe algo válido. Ejemplo: `/guardar Zapatos Adidas, talla 41, precio $40`")
+    # 🔐 ZONA DE ADMINISTRADORES
+    if user_id in ADMIN_IDS:
+        
+        # COMANDO 1: Guardar producto nuevo
+        if texto_recibido.startswith("/guardar"):
+            nueva_info = texto_recibido.replace("/guardar", "").strip()
+            if not nueva_info:
+                await update.message.reply_text("❌ Escribe algo válido. Ejemplo: `/guardar Zapatos Adidas, precio $40`")
+                return
+            with open("inventario.txt", "a", encoding="utf-8") as f:
+                f.write(f"- {nueva_info}\n")
+            await update.message.reply_text("📥 ¡Entendido jefe! Ya guardé ese producto.")
             return
 
-        # Guardar la nueva línea en el archivo de memoria
-        with open("inventario.txt", "a", encoding="utf-8") as f:
-            f.write(f"- {nueva_info}\n")
-            
-        await update.message.reply_text("📥 ¡Entendido jefe! Ya guardé ese producto en mi memoria.")
-        return
+        # COMANDO 2: Ver inventario numerado para poder eliminar
+        if texto_recibido == "/inventario":
+            try:
+                with open("inventario.txt", "r", encoding="utf-8") as f:
+                    lineas = f.readlines()
+                if not lineas:
+                    await update.message.reply_text("📭 El inventario está vacío.")
+                    return
+                
+                texto_lista = "📦 **Inventario Actual (Modo Admin):**\n\n"
+                for i, linea in enumerate(lineas, 1):
+                    # Limpiamos el guión inicial para mostrarlo bonito
+                    prod = linea.replace("- ", "").strip()
+                    texto_lista += f"{i}. {prod}\n"
+                texto_lista += "\n👉 Para eliminar uno, usa: `/eliminar [número]`. Ejemplo: `/eliminar 2`"
+                await update.message.reply_text(texto_lista)
+                return
+            except FileNotFoundError:
+                await update.message.reply_text("📭 No hay productos registrados aún.")
+                return
 
-    # 👥 CASO 2: Cliente consultando al Bot (o admin haciendo pregunta común)
-    # Intentar leer los productos memorizados
+        # COMANDO 3: Eliminar un producto específico por su número
+        if texto_recibido.startswith("/eliminar"):
+            partes = texto_recibido.split()
+            if len(partes) < 2 or not partes[1].isdigit():
+                await update.message.reply_text("❌ Uso correcto: `/eliminar [número]`. Ejemplo: `/eliminar 3`")
+                return
+            
+            num_a_borrar = int(partes[1])
+            try:
+                with open("inventario.txt", "r", encoding="utf-8") as f:
+                    lineas = f.readlines()
+                
+                if num_a_borrar < 1 or num_a_borrar > len(lineas):
+                    await update.message.reply_text(f"❌ Número inválido. El inventario solo tiene {len(lineas)} productos.")
+                    return
+                
+                # Sacamos la línea correspondiente (restamos 1 porque Python cuenta desde 0)
+                eliminado = lineas.pop(num_a_borrar - 1)
+                
+                # Volvemos a escribir el archivo con las líneas que quedaron
+                with open("inventario.txt", "w", encoding="utf-8") as f:
+                    f.writelines(lineas)
+                    
+                await update.message.reply_text(f"🗑️ ¡Listo! Eliminado el producto:\n\"{eliminado.replace('- ', '').strip()}\"")
+                return
+            except FileNotFoundError:
+                await update.message.reply_text("❌ No hay inventario creado todavía.")
+                return
+
+        # COMANDO 4: Resetear todo el inventario de un golpe
+        if texto_recibido == "/borrartodo":
+            if os.path.exists("inventario.txt"):
+                os.remove("inventario.txt")
+            await update.message.reply_text("💥 ¡Inventario completamente vaciado! El bot vuelve a estar de fábrica.")
+            return
+
+    # 👥 ZONA DE CLIENTES (Consultas normales a Gemini)
     try:
         with open("inventario.txt", "r", encoding="utf-8") as f:
             contexto_productos = f.read()
     except FileNotFoundError:
         contexto_productos = "No hay productos registrados en la tienda actualmente."
 
-    # Instrucciones fijas que moldean la personalidad de la IA
     instrucciones_ia = (
         "Eres el asistente virtual inteligente de nuestra tienda. Tu objetivo es atender a los clientes.\n"
         f"Aquí tienes el catálogo e inventario actualizado de la tienda:\n{contexto_productos}\n\n"
@@ -75,13 +126,10 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        # Llamada oficial a Gemini 2.5 Flash
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=texto_recibido,
-            config=types.GenerateContentConfig(
-                system_instruction=instrucciones_ia
-            )
+            config=types.GenerateContentConfig(system_instruction=instrucciones_ia)
         )
         await update.message.reply_text(response.text)
     except Exception as e:
@@ -90,14 +138,9 @@ async def manejar_mensaje(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def manejar_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Maneja las imágenes que envían los clientes (Multimodal)"""
-    # Descargar la foto enviada en la mayor calidad posible
     foto_archivo = await update.message.photo[-1].get_file()
     foto_bytes = await foto_archivo.download_as_bytearray()
-    
-    # Convertirla a un formato que entienda Gemini usando la librería Pillow
     imagen_pil = Image.open(io.BytesIO(foto_bytes))
-    
-    # Si el cliente escribió texto junto con la foto, lo capturamos. Si no, usamos una pregunta genérica
     texto_usuario = update.message.caption or "¿Qué producto es este y qué detalles tiene según la tienda?"
 
     try:
@@ -113,33 +156,27 @@ async def manejar_foto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     try:
-        # Gemini analiza tanto la imagen de PIL como el texto en un solo viaje
         response = client.models.generate_content(
             model='gemini-2.5-flash',
             contents=[imagen_pil, texto_usuario],
-            config=types.GenerateContentConfig(
-                system_instruction=instrucciones_ia
-            )
+            config=types.GenerateContentConfig(system_instruction=instrucciones_ia)
         )
         await update.message.reply_text(response.text)
     except Exception as e:
         logging.error(f"Error en Gemini Foto: {e}")
-        await update.message.reply_text("Veo la imagen, pero no pude procesarla correctamente con mi sistema de visión. ¿Me dices el nombre del producto por texto?")
+        await update.message.reply_text("Veo la imagen, pero no pude procesarla de momento.")
 
 def main():
     if not BOT_TOKEN or not GEMINI_KEY:
-        print("❌ ERROR CRÍTICO: Faltan variables de entorno básicas para arrancar.")
+        print("❌ ERROR CRÍTICO: Faltan variables de entorno.")
         return
 
-    # Iniciar la aplicación del bot de Telegram
     app = Application.builder().token(BOT_TOKEN).build()
-
-    # Registrar las funciones encargadas de escuchar los eventos
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, manejar_mensaje))
     app.add_handler(MessageHandler(filters.PHOTO, manejar_foto))
 
-    print("🤖 Bot Inteligente Protegido en marcha con éxito...")
+    print("🤖 Bot Inteligente con Panel de Control en marcha...")
     app.run_polling()
 
 if __name__ == '__main__':
