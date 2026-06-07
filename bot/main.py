@@ -1,7 +1,7 @@
 import logging
 
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-from telegram.constants import BotCommandScopeChat, BotCommandScopeDefault
+from telegram import BotCommandScopeChat, BotCommandScopeDefault
 
 from bot.config.settings import BOT_TOKEN, GEMINI_KEY, SUPABASE_URL, ADMIN_IDS
 from bot.database.supabase_client import get_supabase
