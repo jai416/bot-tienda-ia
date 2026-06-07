@@ -20,13 +20,13 @@ def crear_tienda(owner_id: int, nombre_tienda: str = "Mi Tienda", descripcion: s
 def obtener_tienda_por_owner(owner_id: int) -> dict | None:
     db = get_supabase()
     result = db.table("tiendas").select("*").eq("owner_id", owner_id).maybe_single().execute()
-    return result.data
+    return result.data if result else None
 
 
 def obtener_tienda_por_id(tienda_id: int) -> dict | None:
     db = get_supabase()
     result = db.table("tiendas").select("*").eq("id", tienda_id).maybe_single().execute()
-    return result.data
+    return result.data if result else None
 
 
 def actualizar_tienda(tienda_id: int, datos: dict) -> dict | None:
@@ -69,7 +69,7 @@ def buscar_por_categoria(tienda_id: int, categoria: str, limit: int = 10) -> lis
 def obtener_producto(tienda_id: int, producto_id: int) -> dict | None:
     db = get_supabase()
     result = db.table("productos").select("*").eq("id", producto_id).eq("tienda_id", tienda_id).maybe_single().execute()
-    return result.data
+    return result.data if result else None
 
 
 def actualizar_producto(tienda_id: int, producto_id: int, datos: dict) -> dict | None:
@@ -109,7 +109,7 @@ def registrar_cliente(cliente_id: int, tienda_id: int, username: str = "", prime
 def obtener_tienda_de_cliente(cliente_id: int) -> dict | None:
     db = get_supabase()
     result = db.table("clientes").select("tienda_id").eq("cliente_id", cliente_id).maybe_single().execute()
-    return result.data
+    return result.data if result else None
 
 
 # ── CONSULTAS / ESTADÍSTICAS ─────────────────────
@@ -129,7 +129,7 @@ def registrar_consulta(tienda_id: int, cliente_id: int | None, consulta: str, re
 def obtener_estadisticas(tienda_id: int) -> dict | None:
     db = get_supabase()
     result = db.table("estadisticas").select("*").eq("tienda_id", tienda_id).maybe_single().execute()
-    return result.data
+    return result.data if result else None
 
 
 def upsert_estadisticas(tienda_id: int, datos: dict):
