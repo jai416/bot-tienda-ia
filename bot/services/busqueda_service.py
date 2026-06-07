@@ -1,20 +1,39 @@
 import re
 
-from bot.services.producto_service import buscar_productos, buscar_similares
-from bot.database.queries import registrar_consulta
+from bot.database.queries import buscar_productos, buscar_por_categoria
+
+
+STOPWORDS = {
+    "tienen", "tiene", "hay", "algún", "alguna", "un", "una",
+    "unos", "unas", "el", "la", "los", "las", "lo", "que",
+    "de", "en", "por", "para", "con", "sin", "es", "son",
+    "busco", "buscando", "quisiera", "me", "pueden", "podrian",
+    "venden", "vende", "oferta", "ofertas", "algo", "todo",
+    "como", "cual", "cuales", "precio", "precios", "caro",
+    "barato", "cuesta", "valen", "vale", "cuestan",
+}
+
+RECOMENDACION_KEYWORDS = {
+    "recomienda", "recomiendas", "recomendación", "recomendaciones",
+    "sugiere", "sugieres", "sugerencia", "opinión", "opinion",
+    "mejor", "cual", "cuál", "elegante", "moderno", "moda",
+    "fancy", "conviene", "qué tal", "que tal", "qué opinas",
+    "que opinas", "está de moda", "novedades", "nuevo",
+    "nuevos", "lanzamiento", "tendencia",
+}
 
 
 def tokenizar_consulta(texto: str) -> list[str]:
     limpio = re.sub(r"[^\w\s]", " ", texto.lower())
-    tokens = limpio.split()
-    stopwords = {"tienen", "tiene", "hay", "algún", "alguna", "un", "una",
-                 "unos", "unas", "el", "la", "los", "las", "lo", "que",
-                 "de", "en", "por", "para", "con", "sin", "es", "son",
-                 "busco", "buscando", "quisiera", "me", "pueden", "podrian",
-                 "venden", "vende", "oferta", "ofertas", "algo", "todo",
-                 "como", "cual", "cuales", "precio", "precios", "caro",
-                 "barato", "cuesta", "valen", "vale", "cuestan"}
-    return [t for t in tokens if t not in stopwords and len(t) > 1]
+    return [t for t in limpio.split() if t not in STOPWORDS and len(t) > 1]
+
+
+def es_consulta_compleja(texto: str) -> bool:
+    texto_lower = texto.lower()
+    for kw in RECOMENDACION_KEYWORDS:
+        if kw in texto_lower:
+            return True
+    return False
 
 
 def buscar(tienda_id: int, consulta: str) -> dict:
@@ -29,7 +48,7 @@ def buscar(tienda_id: int, consulta: str) -> dict:
     alternativas = []
     if not hubo_resultado:
         for t in terminos:
-            alt = buscar_similares(tienda_id, t)
+            alt = buscar_por_categoria(tienda_id, t)
             if alt:
                 alternativas.extend(alt)
                 break
@@ -39,7 +58,3 @@ def buscar(tienda_id: int, consulta: str) -> dict:
         "alternativas": alternativas,
         "hubo_resultado": hubo_resultado
     }
-
-
-def registrar_consulta_stats(tienda_id: int, cliente_id: int | None, consulta: str, respuesta: str, productos_ids: list, hubo_resultado: bool):
-    registrar_consulta(tienda_id, cliente_id, consulta, respuesta, productos_ids, hubo_resultado)

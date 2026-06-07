@@ -6,24 +6,16 @@ from bot.database.queries import (
 )
 
 
-def obtener_o_crear_tienda(owner_id: int) -> dict:
+def obtener_o_crear_tienda(owner_id: int) -> dict | None:
     tienda = obtener_tienda_por_owner(owner_id)
-    if tienda.data:
-        return tienda.data
-    result = db_crear_tienda(owner_id)
-    return result.data[0] if result.data else None
+    if tienda:
+        return tienda
+    return db_crear_tienda(owner_id)
 
 
 def obtener_tienda(tienda_id: int) -> dict | None:
-    result = obtener_tienda_por_id(tienda_id)
-    return result.data
+    return obtener_tienda_por_id(tienda_id)
 
 
 def actualizar_nombre_tienda(tienda_id: int, nombre: str) -> dict | None:
-    result = actualizar_tienda(tienda_id, {"nombre_tienda": nombre})
-    return result.data[0] if result.data else None
-
-
-def actualizar_descripcion_tienda(tienda_id: int, descripcion: str) -> dict | None:
-    result = actualizar_tienda(tienda_id, {"descripcion": descripcion})
-    return result.data[0] if result.data else None
+    return actualizar_tienda(tienda_id, {"nombre_tienda": nombre})

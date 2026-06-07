@@ -1,25 +1,63 @@
-import logging
-import json
-
 from telegram import Update
 from telegram.ext import ContextTypes
+from google import genai
+from google.genai import types
 
-from bot.config.settings import ADMIN_IDS
-from bot.services.producto_service import (
-    crear_producto, listar_productos, obtener_producto,
+from bot.config.settings import GEMINI_KEY
+from bot.database.supabase_client import get_supabase
+from bot.database.queries import (
+    insertar_producto, listar_productos, obtener_producto,
     actualizar_producto, activar_producto, desactivar_producto,
-    eliminar_producto,
+    eliminar_producto, obtener_estadisticas,
 )
-from bot.services.tienda_service import (
-    obtener_o_crear_tienda, actualizar_nombre_tienda,
-    obtener_tienda,
-)
-from bot.services.estadisticas_service import get_estadisticas
+from bot.services.tienda_service import obtener_o_crear_tienda, actualizar_nombre_tienda
 from bot.ai.gemini_client import sugerir_desde_foto
 from bot.utils.helpers import formatear_producto, formatear_lista, parsear_guardado
 
+_gemini_client = genai.Client(api_key=GEMINI_KEY)
+
+
+async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    bot_status = "✅ Bot funcionando"
+
+    try:
+        _gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents="ping",
+            config=types.GenerateContentConfig(temperature=0)
+        )
+        gemini_status = "✅ Gemini conectado"
+    except Exception:
+        gemini_status = "❌ Gemini NO responde"
+
+    supabase_ok = context.application.bot_data.get("supabase_ok")
+    if supabase_ok:
+        supabase_status = "✅ Supabase conectada"
+    else:
+        supabase_status = "❌ Supabase NO disponible"
+
+    texto = (
+        "📊 **Estado del Sistema**\n\n"
+        f"🤖 Bot: {bot_status}\n"
+        f"🧠 Gemini: {gemini_status}\n"
+        f"🗄️ Supabase: {supabase_status}\n\n"
+        "Si ves alguna ❌, contacta al desarrollador."
+    )
+    await update.message.reply_text(texto)
+
+
+async def _supabase_ok(context: ContextTypes.DEFAULT_TYPE) -> bool:
+    return context.application.bot_data.get("supabase_ok", False)
+
 
 async def cmd_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text(
+            "🔧 Estamos teniendo problemas técnicos con nuestros servidores.\n"
+            "Nuestro equipo ya está trabajando para solucionarlo.\n"
+            "Por favor, intenta de nuevo más tarde. 🙏"
+        )
+        return
     user_id = update.effective_user.id
     texto = update.message.text.replace("/guardar", "", 1).strip()
 
@@ -39,7 +77,7 @@ async def cmd_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Debes especificar al menos el nombre del producto.")
         return
 
-    prod = crear_producto(tienda["id"], datos)
+    prod = insertar_producto(tienda["id"], datos)
     if prod:
         await update.message.reply_text(f"✅ Producto guardado:\n{formatear_producto(prod)}")
     else:
@@ -47,6 +85,12 @@ async def cmd_guardar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_inventario(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text(
+            "🔧 Estamos teniendo problemas técnicos con nuestros servidores.\n"
+            "Nuestro equipo ya está trabajando para solucionarlo. 🙏"
+        )
+        return
     user_id = update.effective_user.id
     tienda = obtener_o_crear_tienda(user_id)
     if not tienda:
@@ -64,6 +108,9 @@ async def cmd_inventario(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_eliminar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text("🔧 Error de conexión. Intenta más tarde. 🙏")
+        return
     user_id = update.effective_user.id
     partes = update.message.text.split()
     if len(partes) < 2 or not partes[1].isdigit():
@@ -86,6 +133,9 @@ async def cmd_eliminar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_editar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text("🔧 Error de conexión. Intenta más tarde. 🙏")
+        return
     user_id = update.effective_user.id
     partes = update.message.text.split(maxsplit=3)
     if len(partes) < 4:
@@ -141,6 +191,9 @@ async def cmd_editar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_activar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text("🔧 Error de conexión. Intenta más tarde. 🙏")
+        return
     user_id = update.effective_user.id
     partes = update.message.text.split()
     if len(partes) < 2 or not partes[1].isdigit():
@@ -160,6 +213,9 @@ async def cmd_activar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_desactivar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text("🔧 Error de conexión. Intenta más tarde. 🙏")
+        return
     user_id = update.effective_user.id
     partes = update.message.text.split()
     if len(partes) < 2 or not partes[1].isdigit():
@@ -179,13 +235,16 @@ async def cmd_desactivar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text("🔧 Error de conexión. Intenta más tarde. 🙏")
+        return
     user_id = update.effective_user.id
     tienda = obtener_o_crear_tienda(user_id)
     if not tienda:
         await update.message.reply_text("❌ No se pudo obtener tu tienda.")
         return
 
-    stats = get_estadisticas(tienda["id"])
+    stats = obtener_estadisticas(tienda["id"])
     productos = listar_productos(tienda["id"])
     total_productos = len(productos)
     activos = sum(1 for p in productos if p.get("disponible"))
@@ -204,6 +263,9 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_tienda(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text("🔧 Error de conexión. Intenta más tarde. 🙏")
+        return
     user_id = update.effective_user.id
     nombre = update.message.text.replace("/tienda", "", 1).strip()
 
@@ -221,6 +283,9 @@ async def cmd_tienda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def cmd_borrartodo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text("🔧 Error de conexión. Intenta más tarde. 🙏")
+        return
     user_id = update.effective_user.id
     tienda = obtener_o_crear_tienda(user_id)
     if not tienda:
@@ -253,6 +318,9 @@ async def cmd_ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def manejar_foto_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text("🔧 Error de conexión. Intenta más tarde. 🙏")
+        return
     user_id = update.effective_user.id
     tienda = obtener_o_crear_tienda(user_id)
     if not tienda:
@@ -288,6 +356,9 @@ async def manejar_foto_admin(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 async def cmd_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not await _supabase_ok(context):
+        await update.message.reply_text("🔧 Error de conexión. Intenta más tarde. 🙏")
+        return
     user_id = update.effective_user.id
     sugerencia = context.user_data.get("sugerencia_producto")
     if not sugerencia:
@@ -299,7 +370,7 @@ async def cmd_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ No se pudo obtener tu tienda.")
         return
 
-    prod = crear_producto(tienda["id"], sugerencia)
+    prod = insertar_producto(tienda["id"], sugerencia)
     if prod:
         await update.message.reply_text(f"✅ Producto guardado:\n{formatear_producto(prod)}")
         context.user_data.pop("sugerencia_producto", None)

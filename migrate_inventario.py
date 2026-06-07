@@ -16,9 +16,7 @@ y elimina el archivo original.
 import os
 import sys
 import shutil
-from bot.database.queries import insertar_producto
-from bot.database.supabase_client import get_supabase
-from bot.database.queries import crear_tienda, obtener_tienda_por_owner
+from bot.database.queries import insertar_producto, crear_tienda, obtener_tienda_por_owner
 from bot.config.settings import SUPABASE_URL, SUPABASE_KEY
 
 
@@ -28,14 +26,16 @@ def migrar(owner_id: int):
         return
 
     tienda = obtener_tienda_por_owner(owner_id)
-    if not tienda.data:
+    if not tienda:
         print(f"Creando tienda para owner_id={owner_id}...")
-        result = crear_tienda(owner_id)
-        tienda_id = result.data[0]["id"]
-        print(f"Tienda creada con ID: {tienda_id}")
+        tienda = crear_tienda(owner_id)
+        if not tienda:
+            print("ERROR: No se pudo crear la tienda.")
+            return
+        print(f"Tienda creada con ID: {tienda['id']}")
     else:
-        tienda_id = tienda.data["id"]
-        print(f"Tienda existente encontrada con ID: {tienda_id}")
+        print(f"Tienda existente encontrada con ID: {tienda['id']}")
+    tienda_id = tienda["id"]
 
     with open("inventario.txt", "r", encoding="utf-8") as f:
         lineas = f.readlines()

@@ -1,9 +1,6 @@
-import logging
-
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.config.settings import ADMIN_IDS
 from bot.services.cliente_service import registrar_o_actualizar, obtener_tienda_asociada
 from bot.services.tienda_service import obtener_o_crear_tienda
 from bot.utils.helpers import es_admin
