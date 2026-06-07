@@ -7,5 +7,6 @@ __pycache__/
 # Variables de entorno (Credenciales)
 .env
 
-# Base de datos/Conocimiento local (opcional, si no quieres que se borre en la nube)
-# base_conocimiento.txt
+# Archivos locales de inventario (migrados a Supabase)
+inventario.txt
+inventario_backup.txt

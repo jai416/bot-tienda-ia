@@ -1,5 +1,6 @@
 google-genai
-python-telegram-bot[webhooks]
+python-telegram-bot[job-queue]
 pillow
 python-dotenv
+supabase
 httpx
